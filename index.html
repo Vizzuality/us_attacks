@@ -164,14 +164,46 @@
       for (var i = oldIdx; i<=mxIdx; i++){
         var c = markers[i].geometry.coordinates;
         var severity = markers[i].properties.severity;
+
         var r = 18000*Math.log(severity == 2763 ? 5000 : severity)+45000;
+        //console.log(severity);
+        var radiuspx = 4;
+        if (severity >0) {
+            radiuspx = 6;
+        }
+        if (severity >3) {
+            radiuspx = 10;
+        }
+        if (severity >5) {
+            radiuspx = 14;
+        }
+        if (severity >8) {
+            radiuspx = 18;
+        }
+        if (severity >11) {
+            radiuspx = 22;
+        }    
+        if (severity >15) {
+            radiuspx = 26;
+        }
+        if (severity >44) {
+            radiuspx = 30;
+        }
+        if (severity >168) {
+            radiuspx = 40;
+        } 
+        if (severity >500) {
+            radiuspx = 50;
+        }                               
+            
         var o = 0.8 - 0.5*(r/165202);
-        var m = new L.circle( [c[1],c[0]], r, {
-                fillColor: "#FF6600",
+        var m = new L.circleMarker( [c[1],c[0]], {
+                fillColor: "#FFCC00",
                 opacity: 0.1,
                 color: "#000",
                 weight: 0.2,
-                fillOpacity: o
+                fillOpacity: 0.1,
+                radius: radiuspx
             });
 
         // var interval = setInterval(function(){
