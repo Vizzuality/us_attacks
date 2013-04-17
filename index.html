@@ -1,0 +1,424 @@
+
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8"/>
+    
+    <style>
+      html, body, #map {
+        height: 100%;
+        padding: 0;
+        margin: 0;
+        min-width: 500px;
+      }
+      #time {
+        position: absolute;
+        bottom: 40px;
+        left: 0px;
+        width: 100%;
+        height: 50px;
+      }
+      #time .control {
+        float: left;
+        position: relative;
+        margin: 0 0 30px 0; padding: 10px;
+        height: 30px;
+        min-width: 80px;
+        width: 20%;
+        cursor: pointer;
+        color: white;
+        text-transform:uppercase;
+        text-align: center;
+        line-height: 30px;
+        text-decoration: underline;
+        font:normal 20px "Helvetica",Arial;
+      }
+      #time .slider {
+        float: left;
+        position: relative;
+        width: 65%;
+      }
+
+      #time .slider .bar {
+        position: absolute;
+        width: 100%;
+        top: 35px; left: 0;
+        background: white;
+        height: 2px;
+        z-index: 1000;
+      }
+      #time .slider .tick {
+        position: absolute;
+        width: 50px;
+        margin: 0px; padding: 0px;
+        padding-left: 4px;
+        bottom: -35px; 
+        border-left: 1px solid #FFF;
+        color: #333;
+        text-shadow: 0 0 0.8em #000;
+        line-height: 28px;
+        font:normal 15px "Helvetica",Arial;
+        color:#BCBCBC;
+        height: 28px;
+        z-index: 100;
+      }
+      #time .slider .cursor {
+        position: absolute;
+        width: 12px;
+        top: 31px; left: -5px;
+        background: white;
+        height: 12px;
+        margin:-3px 0 0 0;
+        border-radius: 10px;
+        border:1px solid #CCC;
+        box-shadow:rgba(0,0,0,1) 0 0 5px 0;
+        z-index: 1100;
+        cursor: pointer;
+      }
+      #time .slider .cursor .year{
+        visibility: hidden;
+        width: 36px;
+        margin-left: -16px;
+        margin-top: -60px;
+        background: black;
+        background: rgba(0,0,0,0.4);
+        color: white;
+        text-align: center;
+        padding: 1px;
+      }
+
+      .year{
+        position:absolute;
+        right:23px;
+        top:23px;
+        color: white;
+        text-align: center;
+        padding: 3px 4px;
+        font:normal 70px Arial;
+        z-index:100;
+        letter-spacing:-1px;
+      }
+      .incidents{
+        position:absolute;
+        right:23px;
+        top:100px;
+        color: white;
+        text-align: center;
+        padding: 3px 4px;
+        font:normal 30px Arial;
+        z-index:100;
+        letter-spacing:-1px;
+        text-align: right;
+      }
+    </style>
+
+    <link rel="stylesheet" type="text/css" href="http://ajax.googleapis.com/ajax/libs/jqueryui/1.8.12/themes/dot-luv/jquery-ui.css" /> 
+    <link rel="stylesheet" href="http://libs.cartodb.com/cartodb.js/v2/themes/css/cartodb.css" />
+    <!--[if lte IE 8]>
+        <link rel="stylesheet" href="http://libs.cartodb.com/cartodb.js/v2/themes/css/cartodb.ie.css" />
+    <![endif]-->
+    <script src="http://libs.cartocdn.com/cartodb.js/v2/cartodb.js"></script>
+    <script src="http://ajax.googleapis.com/ajax/libs/jqueryui/1.8.12/jquery-ui.min.js" type="text/javascript"></script> 
+    </head>
+
+  </head>
+    
+  <body>
+    <div id="map"></div>
+    
+    <div id="time">
+      <div class="control">pause</div>
+      <div class="slider">
+          <div class="bar"></div>
+          <div class="cursor"></div>
+      </div>
+    </div>
+    <div class="year">1970</div>
+    <div class="incidents">0 incidents<br/>since 1970</div>
+  </body>
+
+  <script>
+
+    function main() {
+
+    var cartodb_user = 'osm2';
+    var table_name = 'us_attacks';
+    var date_column = 'date';
+
+    var sql = new cartodb.SQL({ user: 'osm2', dp: 5});
+    var miny, minm, maxy, maxm, ticks;
+    var pos = 0, cury, curm;
+    var speed = 50;
+    var status = 1;
+
+    function toggleMarkers(y,m){
+      var iy = miny;
+      var im = 1;
+    }
+    var mxIdx = 0;
+    var oldIdx = 0;
+    var displayMarkers = [];
+    function displayEvents(){
+      for (var i = oldIdx; i<=mxIdx; i++){
+        var c = markers[i].geometry.coordinates;
+        var severity = markers[i].properties.severity;
+        var r = 18000*Math.log(severity == 2763 ? 5000 : severity)+45000;
+        var o = 0.8 - 0.5*(r/165202);
+        var m = new L.circle( [c[1],c[0]], r, {
+                fillColor: "#FF6600",
+                opacity: 0.1,
+                color: "#000",
+                weight: 0.2,
+                fillOpacity: o
+            });
+
+        // var interval = setInterval(function(){
+        //   var a_r = m.getRadius();
+        //   if (a_r >= r) {
+        //     clearInterval(interval);
+        //     return;
+        //   }
+        //   m.setRadius(a_r + (r/120));
+        // },100);
+
+        m.cartodb_id = markers[i].properties.cartodb_id;
+        m.addTo(map);
+        m.on('click', function(ev) {
+            sql.execute("SELECT cartodb_id, the_geom, target as target, killed, wounded, month, year, city, provstate, description, _group as group FROM {{table}} WHERE cartodb_id = {{id}}", {table: table_name, column: date_column, id: ev.target.cartodb_id })
+              .done(function(geojson) {
+                var record = geojson.features[0];
+                var c = record.geometry.coordinates;
+                var d = '<div id="infowindow"><h4>' + record.properties.city + ', ' + record.properties.provstate + '</h4><p>'+record.properties.month+' '+record.properties.year+'</p>';
+                if (record.properties.description){
+                  d += '<p><b>Description</b>: '+record.properties.description+'</p>';
+                }
+                if (record.properties.group){
+                  d += '<p><b>Group responsible</b>: '+record.properties.group+'</p>';
+                }
+                if (record.properties.target){
+                  d += '<p><b>Target</b>: '+record.properties.target+'</p></div>';
+                }
+                if (record.properties.killed){
+                  d += '<p>'+record.properties.killed+' deaths and '+record.properties.wounded+' wounded</p></div>';
+                }
+                var popup = L.popup()
+                    .setLatLng([c[1],c[0]])
+                    .setContent(d)
+                    .openOn(map);
+              });
+        });
+
+
+        var idx = (cury*100)+curm;
+        displayMarkers.push({i: idx, m: m});
+      }
+      oldIdx = mxIdx;
+
+    }
+    function setCursorPos(p){
+        $(".cursor").css({
+          left: p+"px" 
+        });
+    }
+    function setYear(year){
+        $(".year").text(year);
+    }
+    function checkMarkers(cury) {
+      // for(i in displayMarkers){
+      //   if ((Number(String(displayMarkers[i].i).slice(0,4)) + 5) < cury){
+      //     displayMarkers[i].m.setRadius(5000);
+      //   }
+      // }
+    }
+    function setIncidents(){
+      $(".incidents").html(displayMarkers.length + ' incidents<br/>since 1970');
+    }
+    function reset() {
+      status = 2;
+      $('.control').text("PLAY");
+    }
+    function play(){
+      if (status == 1){
+        pos = parseInt($('.cursor').css('left'))+2;
+        if (pos+3 > $('.bar').width()) {
+          reset();
+          return;
+        }
+
+        var y = Math.ceil((((pos+5)/$('.bar').width())*ticks+minm)/12)-1;
+        curm = Math.ceil((((pos+5)/$('.bar').width())*ticks+minm)) - (y*12);
+       
+        cury = y + miny;
+
+        setCursorPos(pos);
+        setYear(cury);
+        checkMarkers(cury);
+        setIncidents();
+
+        for (var i = 0; i < markers.length; i++) {
+          if (markers[i].properties.y <= cury){
+            if (markers[i].properties.m <= curm){
+              mxIdx = i;
+            }
+          }
+        }
+
+        if (mxIdx > oldIdx){
+          displayEvents();
+        }
+
+        if (status == 1){
+          setTimeout(play, speed);
+        }
+      }
+    }
+
+
+      var map = L.map('map', { 
+        zoomControl: true,
+        center: [30, -97],
+        zoom: 4
+      });
+      // add a nice baselayer from mapbox
+      L.tileLayer("http://0.tiles.cartocdn.com/osm2/tiles/bm_dark_lowres/{z}/{x}/{y}.png?sql=SELECT%20the_geom%2Cthe_geom_webmercator%2Clayer_name%2Clabel%2C0%20as%20textsize%20FROM%20bm_dark_lowres%0AUNION%20ALL%0A(SELECT%20the_geom%2Cthe_geom_webmercator%2C'country_borders'%20AS%20layer_name%2Clabel%2Ctextsize%20FROM%20bm_ne_10m_admin_0_countries%20ORDER%20BY%20draworder%20DESC)%0AUNION%20ALL%0A(SELECT%20the_geom%2Cthe_geom_webmercator%2C'glaciated_areas'%20AS%20layer_name%2Cnull%20as%20label%2C1%20as%20textsize%20FROM%20bm_ne_10m_glaciated_areas)%0AUNION%20ALL%0A(SELECT%20the_geom%2Cthe_geom_webmercator%2C'sea_floor'%20AS%20layer_name%2Cnull%20as%20label%2C1%20as%20textsize%20FROM%20bm_ne_10m_bathymetry_g_4000)%0AUNION%20ALL%0A(SELECT%20the_geom%2Cthe_geom_webmercator%2C'urban_areas'%20AS%20layer_name%2Cnull%20as%20label%2C1%20as%20textsize%20FROM%20bm_ne_10m_urban_areas%20ORDER%20BY%20draworder%20ASC)%0AUNION%20ALL%0A(SELECT%20the_geom%2Cthe_geom_webmercator%2C'major_roads'%20AS%20layer_name%2Clabel%2Cdraworder%20as%20textsize%20FROM%20bm_ne_10m_roads%20ORDER%20BY%20draworder%20ASC)%0AUNION%20ALL%0A(SELECT%20the_geom%2Cthe_geom_webmercator%2C'detailed_roads'%20AS%20layer_name%2Clabel%2Cdraworder%20as%20textsize%20FROM%20bm_london_roads_test%20ORDER%20BY%20draworder%20DESC)%0AUNION%20ALL%0A(SELECT%20the_geom%2Cthe_geom_webmercator%2C'water_objects'%20AS%20layer_name%2Cnull%20as%20label%2C1%20as%20textsize%20FROM%20bm_ne_10m_lakes)%0AUNION%20ALL%0A(SELECT%20the_geom%2Cthe_geom_webmercator%2C'admin1_borders'%20AS%20layer_name%2Clabel%2C1%20as%20textsize%20FROM%20bm_ne_10m_admin_1_states_provinces_shp%20ORDER%20BY%20draworder%20ASC)%0AUNION%20ALL%0A(SELECT%20the_geom%2Cthe_geom_webmercator%2C'populated_places'%20AS%20layer_name%2Clabel%2Ctextsize%20FROM%20bm_ne_10m_populated_places%20ORDER%20BY%20draworder%20ASC)&cache_policy=persist&cache_buster=2013-04-03T02%3A58%3A52%2B02%3A00", {
+        attribution: 'CartoDB'
+      }).addTo(map);
+
+    var markers = {},
+        states = {},
+        restart = false,
+        topidx = 0;
+
+    sql.execute("SELECT to_char(min({{column}}), 'MM:YYYY') min, to_char(max({{column}}), 'MM:YYYY') max, max(killed) as severity FROM {{table}} ", {table: table_name, column: date_column})
+      .done(function(ex) {
+
+        var min = ex.rows[0].min;
+        miny = parseInt(min.split(':')[1]);
+        minm = parseInt(min.split(':')[0]);
+        cury = miny;
+        curm = minm;
+        var max = ex.rows[0].max;
+        maxy = parseInt(max.split(':')[1]);
+        maxm = parseInt(max.split(':')[0]);
+        ticks =( 12*(maxy-miny) ) - minm + maxm;
+
+        var severity_t = ex.rows[0].severity;
+
+
+        for (var i = miny + 1; i < maxy; i=i+9){
+          var tick = $('<div>'+i+'</div>')
+                       .addClass('tick')
+                       .css({
+                          left: (99.5*(( 12*(i-miny) ) - minm ) / ticks ) + "%"
+                        })
+          $('.slider').append(tick);
+        }
+
+
+        sql.options['format'] = 'geojson';
+
+        sql.execute("SELECT cartodb_id, the_geom, to_char({{column}}, 'MM')::int m, to_char({{column}}, 'YYYY')::int y, killed as severity FROM {{table}} WHERE the_geom IS NOT NULL ORDER BY {{column}} ASC", {table: table_name, column: date_column})
+          .done(function(collection) {
+
+            markers = collection.features;
+            
+            $(".control").click(function(){
+              if (status == 1){
+                status = 0;
+                $(".control").html('play');
+              } else if (status == 0) {
+                status = 1;
+                $(".control").html('pause');
+                play();
+              } else if (status == 2) {
+                status = 1;
+                $(".control").html('pause');
+                pos = -3;
+                setCursorPos(pos);
+                for(i in displayMarkers){
+                  map.removeLayer(displayMarkers[i].m);
+                }
+                displayMarkers = [];
+                mxIdx = 0;
+                oldIdx = 0;
+                play();
+              }
+            });
+
+            $('.cursor').draggable({
+                axis: "x",
+                start: function( event, ui ) {
+                  if (status == 1){
+                    status = 0;
+                    restart = true;
+                  }
+                },
+                stop: function( event, ui ) {
+                  pos = parseInt($('.cursor').css('left'))+2;
+                  var y = Math.ceil((((pos+5)/$('.bar').width())*ticks+minm)/12)-1;
+                  curm = Math.ceil((((pos+5)/$('.bar').width())*ticks+minm)) - (y*12);
+                  cury = y + miny;
+
+                  var newidx = (cury*100)+curm;
+                  if (displayMarkers[displayMarkers.length - 1].i > newidx){
+                      var nm = [];
+                      for(i in displayMarkers){
+                        if (displayMarkers[i].i > newidx){
+                          map.removeLayer(displayMarkers[i].m);
+                        } else {
+                          nm.push(displayMarkers[i]);
+                        }
+                      }
+                      displayMarkers = nm;
+                      mxIdx = displayMarkers.length;
+                      oldIdx = mxIdx;
+                  }
+
+                  if (restart){
+                    status = 1;
+                    play();
+                    restart = false;
+                  } else {
+                    for (var i = 0; i < markers.length; i++) {
+                      if (markers[i].properties.y <= cury){
+                        if (markers[i].properties.m <= curm){
+                          mxIdx = i;
+                        }
+                      }
+                    }
+                    if (mxIdx > oldIdx){
+                      displayEvents();
+                    }
+                  }
+                  
+                },
+                drag : function(e, ui){
+                  pos = parseInt($('.cursor').css('left'))+2;
+                  var y = Math.ceil((((pos+5)/$('.bar').width())*ticks+minm)/12)-1 + miny;
+                  $('.year').html(y);
+                }
+            });
+            play();
+          });
+          // $('.cursor').mousedown(function(){
+          //   $('.year').css('visibility', 'visible');
+          // })
+          // $('.cursor').mouseover(function(){
+          //   $('.year').css('visibility', 'visible');
+          // })
+          // $('.cursor').mouseleave(function(){
+          //   $('.year').css('visibility', 'hidden');
+          // })
+      });
+
+    }
+
+    // window.onload = initMap;
+    window.onload = main;
+
+  </script>
+
+
+</html>
