@@ -265,8 +265,13 @@
       // }
     }
     function setIncidents(){
-      $(".incidents").html(displayMarkers.length + ' incidents<br/>since 1970');
+      $(".incidents").html(numberWithCommas(displayMarkers.length) + ' incidents<br/>since 1970');
     }
+    
+    function numberWithCommas(x) {
+        return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    }
+    
     function reset() {
       status = 2;
       $('.control').text("PLAY");
